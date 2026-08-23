@@ -157,7 +157,7 @@
   .balance-cell{font-weight:700;color:var(--ink);}
   .balance-cell.neg{color:var(--neg);}
   .table-scroll{max-height:460px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;}
-  #diarioTableWrap.table-scroll{max-height:1450px;} /* espacio para ~2-3 meses de movimientos sin scroll */
+  #diarioTableWrap.table-scroll{max-height:none;overflow-y:visible;} /* Diario completo: sin scroll vertical interno */
   .table-scroll table{font-size:12.5px;}
   .table-scroll th{top:0;}
   .row-input{
@@ -490,7 +490,7 @@
     <button class="btn ghost" id="modeAnalysis">Análisis</button>
   </div>
 
-  <div class="tabs" id="dayTabs">
+  <div class="tabs" id="dayTabs" style="justify-content:center;">
     <button class="tab-btn active" data-view="resumen">Resumen</button>
     <button class="tab-btn" data-view="diario">Diario</button>
     <button class="tab-btn" data-view="tarjeta">Tarjeta</button>
@@ -590,7 +590,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="diario-gastos-v1.js?v=20260823a"></script>
-<script src="analisis-finanzas.js?v=20260823v16-e"></script>
+<script src="diario-gastos-v1.js?v=20260823stablev22c"></script>
+<script src="analisis-finanzas.js?v=20260823stablev22c"></script>
 </body>
 </html>

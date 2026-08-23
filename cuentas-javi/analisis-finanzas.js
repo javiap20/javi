@@ -301,10 +301,19 @@
     document.getElementById('dayTabs').style.display=analysis?'none':'flex';
     document.getElementById('analysisTabs').style.display=analysis?'flex':'none';
     host().style.display=analysis?'block':'none';
-    document.querySelectorAll('.view').forEach(v=>{ if(analysis)v.style.display='none'; else v.style.display=''; });
+    if(analysis){
+      document.querySelectorAll('.view').forEach(v=>{ v.classList.remove('active'); v.style.display='none'; });
+    }else{
+      document.querySelectorAll('#dayTabs .tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.view==='resumen'));
+      document.querySelectorAll('.view').forEach(v=>{
+        const isResumen=v.id==='view-resumen';
+        v.classList.toggle('active',isResumen);
+        v.style.display=isResumen?'block':'none';
+      });
+    }
     document.getElementById('modeDay').className='btn '+(!analysis?'primary':'ghost');
     document.getElementById('modeAnalysis').className='btn '+(analysis?'primary':'ghost');
-    if(analysis) renders[active](); else { const a=document.querySelector('.view.active'); if(a)a.style.display='block'; }
+    if(analysis) renders[active]();
   }
   document.getElementById('modeDay').onclick=()=>setMode('day');
   document.getElementById('modeAnalysis').onclick=()=>setMode('analysis');

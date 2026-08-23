@@ -630,6 +630,7 @@ function renderTarjeta(){
               <option value="vacaciones" ${entry && cardEntryType(entry)==='vacaciones'?'selected':''}>Vacaciones</option>
             </select>
             <input class="row-input card-amount-input num mono" type="text" inputmode="decimal" value="${fmt(val)}" data-card-id="${safeId}" title="Importe editable">
+            <button class="icon-btn" data-card-del="${safeId}" title="Eliminar gasto de tarjeta" aria-label="Eliminar ${escapeHtml(cat)}">✕</button>
           </span>
         </div>
         <div style="background:var(--panel-alt);border-radius:5px;height:8px;overflow:hidden;">
@@ -648,6 +649,20 @@ function renderTarjeta(){
         setCardCategoryType(ui.year, entry.month, entry.category, e.target.value);
         saveDB(); renderAll();
         toast('Tipo de gasto actualizado');
+      });
+    });
+    catBox.querySelectorAll('button[data-card-del]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        const id=e.currentTarget.getAttribute('data-card-del');
+        const entry=yd.cardEntries.find(c=>c.id===id);
+        if(!entry) return;
+        if(!confirm(`¿Eliminar ${entry.category} de ${MESES[Number(entry.month)-1]}?`)) return;
+        const month=Number(entry.month);
+        yd.cardEntries=yd.cardEntries.filter(c=>c.id!==id);
+        syncTarjetaMonthToDiario(ui.year, month, true);
+        saveDB();
+        renderAll();
+        toast('Gasto de tarjeta eliminado');
       });
     });
     catBox.querySelectorAll('input[data-card-id]').forEach(inp=>{
@@ -2034,12 +2049,13 @@ document.getElementById('importJsonFile').addEventListener('change', async e=>{ 
 // ============================================================
 // EVENTOS UI
 // ============================================================
-document.querySelectorAll('.tab-btn').forEach(btn=>{
+document.querySelectorAll('#dayTabs .tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.querySelectorAll('#dayTabs .tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>{ v.classList.remove('active'); v.style.display='none'; });
     btn.classList.add('active');
-    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    const view=document.getElementById('view-'+btn.dataset.view);
+    if(view){ view.classList.add('active'); view.style.display='block'; }
   });
 });
 document.getElementById('yearSelect').addEventListener('change', e=>{
