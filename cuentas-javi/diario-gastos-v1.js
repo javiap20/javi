@@ -3,7 +3,7 @@
    ============================================================ */
 
 const STORAGE_KEY = 'diarioGastosDB_v1';
-const UI_BUILD = 'gist-central-solo-gist-2026-08-23-fix2';
+const UI_BUILD = 'gist-central-solo-gist-2026-08-23-fix3';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const FIJOS_REF_YEAR = 2026; // año de referencia del MASTER
@@ -1935,7 +1935,11 @@ async function initializeData(){
       gistSync.suppress=false;
       gistSync.remoteUpdatedAt=remoteUpdatedAt;
       gistSync.loadedFromGist=true;
-      setGistStatus('ok',`☁ Gist central cargado · ${formatSyncDate(remoteUpdatedAt)}`);
+      if(remote.possiblyCached){
+        setGistStatus('pending',`☁ Gist cargado (copia pública, puede ir unos minutos por detrás) · ${formatSyncDate(remoteUpdatedAt)}`);
+      }else{
+        setGistStatus('ok',`☁ Gist central cargado · ${formatSyncDate(remoteUpdatedAt)}`);
+      }
       return true;
     }
     // El Gist responde pero todavía no existe el archivo: es un estado inicial
@@ -1988,8 +1992,17 @@ async function importDashboardJson(file){
     saveDB({sync:false});
     gistSync.suppress=false;
     renderAll();
-    setGistStatus('pending','☁ JSON importado · copia local pendiente de guardar en Gist');
-    toast('JSON importado en local');
+    // Importar es una acción explícita: igual que meter el token, lo que quede en
+    // pantalla se sube al Gist tal cual si hay token. Si no hay token, se avisa
+    // claramente de que no se ha guardado nada todavía.
+    gistSync.loadedFromGist=true;
+    if(gistSync.token){
+      const ok = await syncGistNow(true);
+      toast(ok ? 'JSON importado y guardado en el Gist' : 'JSON importado, pero falló el guardado en el Gist');
+    }else{
+      setGistStatus('pending','☁ JSON importado · sin token, no se ha guardado en el Gist');
+      toast('JSON importado (sin token, no se ha guardado)');
+    }
   }catch(err){
     console.error('No se pudo importar JSON:',err);
     toast('No se pudo importar JSON');
@@ -2125,7 +2138,9 @@ function gistHeaders(token){
 function gistFetch(url, options={}){
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(), GIST_TIMEOUT_MS);
-  return fetch(url, {...options, signal:controller.signal}).finally(()=>clearTimeout(timer));
+  // No-store siempre: ni el navegador ni Safari privado deben poder servir
+  // una respuesta cacheada del Gist. Queremos SIEMPRE ir a red.
+  return fetch(url, {cache:'no-store', ...options, signal:controller.signal}).finally(()=>clearTimeout(timer));
 }
 
 function setGistStatus(kind, text){
@@ -2230,14 +2245,18 @@ function normalizeGistPayload(payload){
 async function fetchGistRemote(){
   let apiError = null;
   try{
-    const res = await gistFetch(GIST_API_URL, {headers:gistHeaders()});
+    // Usamos el token también para LEER (no solo para escribir) cuando existe:
+    // así usamos el límite de peticiones autenticado de GitHub en vez del límite
+    // anónimo (60/hora por IP), que es fácil de agotar entrando desde varios
+    // dispositivos y probando varias veces.
+    const res = await gistFetch(GIST_API_URL, {headers:gistHeaders(gistSync.token)});
     if(res.ok){
       const gist = await res.json();
       const file = gist.files && gist.files[GIST_FILE];
       if(file){
         let text = file.content;
         if(file.truncated && file.raw_url){
-          const rawRes = await gistFetch(file.raw_url, {headers:gistHeaders()});
+          const rawRes = await gistFetch(file.raw_url, {headers:gistHeaders(gistSync.token)});
           if(!rawRes.ok) throw new Error(`Gist raw HTTP ${rawRes.status}`);
           text = await rawRes.text();
         }
@@ -2255,12 +2274,18 @@ async function fetchGistRemote(){
 
   // Fallback de lectura pública: evita depender de api.github.com en navegadores
   // con restricciones especiales (Safari privado, bloqueadores, rate limits, etc.).
+  // OJO: gist.githubusercontent.com/.../raw/... va detrás de una CDN (Fastly) que
+  // cachea la respuesta durante varios minutos. Sin un parámetro que rompa esa
+  // caché, este fallback puede devolver una copia vieja del Gist aunque acabe de
+  // guardarse una nueva — por eso se añade un timestamp y se marca la lectura
+  // como "posible copia en caché" en vez de tratarla como si fuera igual de fiable
+  // que la lectura por la API.
   try{
-    const rawRes = await gistFetch(GIST_RAW_URL, {headers:{'Accept':'text/plain'}});
+    const rawRes = await gistFetch(`${GIST_RAW_URL}?_=${Date.now()}`, {headers:{'Accept':'text/plain'}});
     if(!rawRes.ok) throw new Error(`Gist raw fallback HTTP ${rawRes.status}`);
     const payload = JSON.parse(await rawRes.text());
     if(!isValidGistPayload(payload)) throw new Error('El archivo raw del Gist no tiene un formato válido');
-    return {exists:true, payload:normalizeGistPayload(payload), gist:null, response:rawRes, source:'raw'};
+    return {exists:true, payload:normalizeGistPayload(payload), gist:null, response:rawRes, source:'raw', possiblyCached:true};
   }catch(rawErr){
     const detail = apiError?.message ? `${apiError.message}; ${rawErr.message}` : rawErr.message;
     throw new Error(`No se pudo leer el Gist remoto (${detail})`);
@@ -2346,7 +2371,11 @@ async function replaceFromGist(){
     renderAll();
     gistSync.remoteUpdatedAt = DB.updatedAt;
     gistSync.loadedFromGist = true;
-    setGistStatus('ok', `☁ Última actualización del Gist · ${formatSyncDate(DB.updatedAt)}`);
+    if(remote.possiblyCached){
+      setGistStatus('pending', `☁ Traído (copia pública, puede ir unos minutos por detrás) · ${formatSyncDate(DB.updatedAt)}`);
+    }else{
+      setGistStatus('ok', `☁ Última actualización del Gist · ${formatSyncDate(DB.updatedAt)}`);
+    }
     toast('Datos traídos del Gist');
     return true;
   }catch(err){
