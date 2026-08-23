@@ -3,7 +3,7 @@
    ============================================================ */
 
 const STORAGE_KEY = 'diarioGastosDB_v1';
-const UI_BUILD = 'gist-central-raw-fallback-2026-08-16-fix1';
+const UI_BUILD = 'gist-central-solo-gist-2026-08-23-fix2';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const FIJOS_REF_YEAR = 2026; // año de referencia del MASTER
@@ -40,7 +40,11 @@ const gistSync = {
   timer: null,
   syncing: false,
   remoteUpdatedAt: null,
-  lastStatus: null
+  lastStatus: null,
+  // Solo se pone a true cuando esta pestaña ha leído el Gist con éxito en esta sesión.
+  // El autoguardado NUNCA se activa si esto es false: así nunca se sube al Gist un
+  // estado que no sepamos con certeza que parte de la última versión remota.
+  loadedFromGist: false
 };
 
 let DB = loadDB();
@@ -1911,14 +1915,12 @@ async function importar2027Manual(file){
 }
 
 async function initializeData(){
-  // Sincronizacion simple: al abrir, el Gist es siempre la fuente de verdad.
-  // Si hay una copia remota valida, sustituye la copia local sin comparar fechas
-  // entre dispositivos. Los cambios locales solo se suben cuando hay token y se
-  // guarda/sincroniza explicitamente (o mediante el autosync ya existente).
+  // Regla única: el Gist es la fuente de verdad. Al entrar, SIEMPRE se llama al Gist
+  // (nunca se arranca "como si nada" con la copia local). Si la lectura del Gist
+  // falla, el dashboard NO finge tener datos al día: avisa claramente y bloquea el
+  // autoguardado hasta que una lectura fresca del Gist tenga éxito, para que nunca
+  // se pueda sobrescribir el Gist con un estado que no sabemos si es el último.
   try{
-    // El Gist tiene prioridad, pero nunca puede bloquear el arranque del dashboard.
-    // Si la red/API no responde a tiempo, arrancamos con la copia local y el usuario
-    // puede volver a traer el Gist manualmente desde el boton Gist.
     const remote=await Promise.race([
       fetchGistRemote(),
       new Promise((_,reject)=>setTimeout(()=>reject(new Error('Timeout de lectura del Gist')),8000))
@@ -1932,25 +1934,28 @@ async function initializeData(){
       saveDB({sync:false});
       gistSync.suppress=false;
       gistSync.remoteUpdatedAt=remoteUpdatedAt;
+      gistSync.loadedFromGist=true;
       setGistStatus('ok',`☁ Gist central cargado · ${formatSyncDate(remoteUpdatedAt)}`);
       return true;
     }
+    // El Gist responde pero todavía no existe el archivo: es un estado inicial
+    // legítimo y confirmado, no un fallo de red. Arrancamos en blanco.
+    gistSync.loadedFromGist=true;
+    setBootstrapStatus('2026/2027 en Gist · MASTER se carga automáticamente');
+    setGistStatus('ok','☁ Gist listo · todavía no existen datos guardados');
+    return true;
   }catch(err){
     console.warn('Gist no disponible durante el arranque:',err);
   }finally{
     gistSync.suppress=false;
   }
 
-  // Solo si el Gist no esta disponible conservamos la copia local.
-  if(DB.updatedAt){
-    setBootstrapStatus(bootstrapStateText(),true);
-    setGistStatus('pending','☁ Gist no disponible · usando copia local');
-    return true;
-  }
-
-  setBootstrapStatus('2026/2027 en Gist o copia local · MASTER se carga automáticamente');
-  setGistStatus('ok','☁ Gist listo · todavía no existen datos guardados');
-  return true;
+  // El Gist no ha respondido: NO se usa la copia local como si fuera válida.
+  // Se bloquea el guardado hasta reintentar con éxito (botón ☁ Gist › Traer del Gist).
+  gistSync.loadedFromGist=false;
+  setBootstrapStatus('No se pudo leer el Gist · comprueba tu conexión', false);
+  setGistStatus('error','⚠ No se pudo leer el Gist · pulsa ☁ Gist › "Traer del Gist" para reintentar. Los cambios no se guardan hasta entonces.');
+  return false;
 }
 
 function exportDashboardJson(){
@@ -2278,10 +2283,16 @@ function applyGistData(data){
 }
 
 function scheduleGistSync(){
-  if(!gistSync.ready || !gistSync.token) {
-    if(gistSync.ready && DB.updatedAt && (!gistSync.remoteUpdatedAt || Date.parse(DB.updatedAt) > Date.parse(gistSync.remoteUpdatedAt))){
-      setGistStatus('pending', '☁ Cambios locales pendientes · añade token para sincronizar');
-    }
+  if(!gistSync.ready) return;
+  // Nunca autoguardamos si esta sesión no ha confirmado leer el Gist primero:
+  // así un fallo de red al arrancar no puede acabar sobrescribiendo el Gist
+  // con un estado desfasado de este dispositivo.
+  if(!gistSync.loadedFromGist){
+    setGistStatus('error','⚠ Sin lectura reciente del Gist · los cambios NO se guardan · pulsa ☁ Gist › "Traer del Gist"');
+    return;
+  }
+  if(!gistSync.token){
+    setGistStatus('pending', '☁ Cambios locales pendientes · añade token para sincronizar');
     return;
   }
   clearTimeout(gistSync.timer);
@@ -2289,7 +2300,8 @@ function scheduleGistSync(){
   gistSync.timer = setTimeout(()=>syncGistNow(), 700);
 }
 
-async function syncGistNow(){
+async function syncGistNow(force=false){
+  if(!force && !gistSync.loadedFromGist) return false;
   if(!gistSync.token || gistSync.syncing) return false;
   gistSync.syncing = true;
   try{
@@ -2333,6 +2345,7 @@ async function replaceFromGist(){
     saveDB({sync:false});
     renderAll();
     gistSync.remoteUpdatedAt = DB.updatedAt;
+    gistSync.loadedFromGist = true;
     setGistStatus('ok', `☁ Última actualización del Gist · ${formatSyncDate(DB.updatedAt)}`);
     toast('Datos traídos del Gist');
     return true;
@@ -2347,14 +2360,18 @@ async function replaceFromGist(){
 }
 
 async function prepareTokenAndSync(token, remember){
-  // Guardar simple: lo que hay ahora mismo en este dispositivo se sube al Gist.
-  // No se vuelve a descargar ni se resuelve silenciosamente contra otra version.
+  // Guardar simple: lo que hay ahora mismo en pantalla en este dispositivo se sube
+  // al Gist, tal cual. Es una acción explícita del usuario (mete el token y pulsa
+  // guardar), así que se fuerza el push aunque la lectura inicial del Gist hubiera
+  // fallado — no se vuelve a descargar ni se resuelve silenciosamente contra otra versión.
   setGistToken(token, remember);
   if(!gistSync.token){
     setGistStatus('pending','☁ Sin token · solo lectura del Gist');
     return false;
   }
-  return await syncGistNow();
+  const ok = await syncGistNow(true);
+  if(ok) gistSync.loadedFromGist = true;
+  return ok;
 }
 
 function openGistPanel(){
