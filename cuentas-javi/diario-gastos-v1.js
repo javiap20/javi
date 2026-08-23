@@ -1911,90 +1911,40 @@ async function importar2027Manual(file){
 }
 
 async function initializeData(){
-  let remote=null;
-  try{ remote=await fetchGistRemote(); }
-  catch(err){ console.warn('Gist no disponible durante el arranque:',err); }
-
-  if(!DB.syncMeta) DB.syncMeta={lastSyncedAt:null, forceLocalImport:false};
-
-  if(remote?.exists){
-    const remoteUpdatedAt=remote.payload.updatedAt||remote.gist?.updated_at||null;
-    gistSync.remoteUpdatedAt=remoteUpdatedAt;
-    const lastSyncedAt=DB.syncMeta.lastSyncedAt||null;
-    const forceLocal=!!DB.syncMeta.forceLocalImport;
-    const localUpdatedAt=DB.updatedAt||null;
-
-    // Cuando existe una copia remota válida, el Gist es la fuente central.
-    // Una importación JSON local solo se considera candidata a subir cuando
-    // el usuario pulsa Guardar/entra el token; no debe imponerse al arrancar.
-    // Un dispositivo que nunca ha sincronizado debe confiar en el Gist central.
-    if(!lastSyncedAt){
-      gistSync.suppress=true;
-      applyGistData(remote.payload.data);
-      DB.updatedAt=remoteUpdatedAt||new Date().toISOString();
-      DB.syncMeta={lastSyncedAt:DB.updatedAt, forceLocalImport:false};
-      saveDB({sync:false});
-      gistSync.suppress=false;
-      setGistStatus('ok',`☁ Gist central cargado · ${formatSyncDate(DB.updatedAt)}`);
-      return true;
-    }
-
-    const localChanged = !!localUpdatedAt && Date.parse(localUpdatedAt) > Date.parse(lastSyncedAt);
-    const remoteChanged = !!remoteUpdatedAt && Date.parse(remoteUpdatedAt) > Date.parse(lastSyncedAt);
-
-    if(remoteChanged && !localChanged){
+  // Sincronizacion simple: al abrir, el Gist es siempre la fuente de verdad.
+  // Si hay una copia remota valida, sustituye la copia local sin comparar fechas
+  // entre dispositivos. Los cambios locales solo se suben cuando hay token y se
+  // guarda/sincroniza explicitamente (o mediante el autosync ya existente).
+  try{
+    // El Gist tiene prioridad, pero nunca puede bloquear el arranque del dashboard.
+    // Si la red/API no responde a tiempo, arrancamos con la copia local y el usuario
+    // puede volver a traer el Gist manualmente desde el boton Gist.
+    const remote=await Promise.race([
+      fetchGistRemote(),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error('Timeout de lectura del Gist')),8000))
+    ]);
+    if(remote?.exists){
+      const remoteUpdatedAt=remote.payload.updatedAt||remote.gist?.updated_at||new Date().toISOString();
       gistSync.suppress=true;
       applyGistData(remote.payload.data);
       DB.updatedAt=remoteUpdatedAt;
       DB.syncMeta={lastSyncedAt:remoteUpdatedAt, forceLocalImport:false};
       saveDB({sync:false});
       gistSync.suppress=false;
-      setGistStatus('ok',`☁ Gist actualizado · ${formatSyncDate(remoteUpdatedAt)}`);
+      gistSync.remoteUpdatedAt=remoteUpdatedAt;
+      setGistStatus('ok',`☁ Gist central cargado · ${formatSyncDate(remoteUpdatedAt)}`);
       return true;
     }
-
-    if(localChanged && !remoteChanged){
-      setGistStatus('pending',`☁ Cambios locales pendientes · Gist ${formatSyncDate(remoteUpdatedAt)}`);
-      if(gistSync.token) await syncGistNow();
-      return true;
-    }
-
-    if(localChanged && remoteChanged){
-      // Conflicto real: conservamos una copia local de recuperación y gana el Gist central.
-      try{ localStorage.setItem(GIST_LOCAL_SYNC_BACKUP_KEY, JSON.stringify(DB)); }catch(e){}
-      gistSync.suppress=true;
-      applyGistData(remote.payload.data);
-      DB.updatedAt=remoteUpdatedAt||new Date().toISOString();
-      DB.syncMeta={lastSyncedAt:DB.updatedAt, forceLocalImport:false};
-      saveDB({sync:false});
-      gistSync.suppress=false;
-      setGistStatus('ok',`☁ Gist central gana · copia local de recuperación guardada`);
-      return true;
-    }
-
-    // Sin cambios reales: dejamos la copia local sincronizada con el remoto.
-    gistSync.suppress=true;
-    applyGistData(remote.payload.data);
-    DB.updatedAt=remoteUpdatedAt||localUpdatedAt||new Date().toISOString();
-    DB.syncMeta={lastSyncedAt:DB.updatedAt, forceLocalImport:false};
-    saveDB({sync:false});
+  }catch(err){
+    console.warn('Gist no disponible durante el arranque:',err);
+  }finally{
     gistSync.suppress=false;
-    setGistStatus('ok',`☁ Gist sincronizado · ${formatSyncDate(DB.updatedAt)}`);
-    return true;
   }
 
-  if(DB.syncMeta?.forceLocalImport){
-    setGistStatus('pending','☁ Importación local pendiente · no existe copia remota');
-    return true;
-  }
-
+  // Solo si el Gist no esta disponible conservamos la copia local.
   if(DB.updatedAt){
     setBootstrapStatus(bootstrapStateText(),true);
-    if(gistSync.token){
-      await syncGistNow();
-    }else{
-      setGistStatus('pending','☁ Sin copia remota · cambios locales pendientes');
-    }
+    setGistStatus('pending','☁ Gist no disponible · usando copia local');
     return true;
   }
 
@@ -2397,46 +2347,14 @@ async function replaceFromGist(){
 }
 
 async function prepareTokenAndSync(token, remember){
+  // Guardar simple: lo que hay ahora mismo en este dispositivo se sube al Gist.
+  // No se vuelve a descargar ni se resuelve silenciosamente contra otra version.
   setGistToken(token, remember);
   if(!gistSync.token){
     setGistStatus('pending','☁ Sin token · solo lectura del Gist');
     return false;
   }
-  // Si hay una importación JSON forzada, la intención explícita es subirla.
-  if(DB.syncMeta?.forceLocalImport){
-    return await syncGistNow();
-  }
-  // Antes de escribir, resolver primero contra el Gist remoto para evitar que un dispositivo
-  // con datos viejos pise la copia central.
-  try{
-    const remote=await fetchGistRemote();
-    if(remote?.exists){
-      const remoteUpdatedAt=remote.payload.updatedAt||remote.gist?.updated_at||null;
-      const lastSyncedAt=DB.syncMeta?.lastSyncedAt||null;
-      const localChanged=!!DB.updatedAt && !!lastSyncedAt && Date.parse(DB.updatedAt)>Date.parse(lastSyncedAt);
-      const remoteChanged=!!remoteUpdatedAt && !!lastSyncedAt && Date.parse(remoteUpdatedAt)>Date.parse(lastSyncedAt);
-      if(!lastSyncedAt || (remoteChanged && !localChanged) || (remoteChanged && localChanged)){
-        if(remoteChanged && localChanged){
-          try{ localStorage.setItem(GIST_LOCAL_SYNC_BACKUP_KEY, JSON.stringify(DB)); }catch(e){}
-        }
-        gistSync.suppress=true;
-        applyGistData(remote.payload.data);
-        DB.updatedAt=remoteUpdatedAt||new Date().toISOString();
-        DB.syncMeta={lastSyncedAt:DB.updatedAt, forceLocalImport:false};
-        saveDB({sync:false});
-        gistSync.suppress=false;
-        renderAll();
-        setGistStatus('ok',`☁ Gist central cargado · ${formatSyncDate(DB.updatedAt)}`);
-        return true;
-      }
-      if(localChanged && !remoteChanged) return await syncGistNow();
-    }
-    return await syncGistNow();
-  }catch(err){
-    console.warn('No se pudo resolver el estado antes de guardar:',err);
-    setGistStatus('error','⚠ Gist · no se pudo verificar la versión remota');
-    return false;
-  }
+  return await syncGistNow();
 }
 
 function openGistPanel(){
