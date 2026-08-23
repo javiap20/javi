@@ -3,7 +3,7 @@
    ============================================================ */
 
 const STORAGE_KEY = 'diarioGastosDB_v1';
-const UI_BUILD = 'gist-central-solo-gist-2026-08-23-fix3';
+const UI_BUILD = 'gist-central-solo-gist-2026-08-23-fix5';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const MESES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const FIJOS_REF_YEAR = 2026; // año de referencia del MASTER
@@ -486,6 +486,11 @@ function renderDiario(){
       const entry = yd.days.find(x=>x.id===id);
       if(!entry) return;
       entry[field] = field==='amount' ? parseEsNumber(e.target.value) : e.target.value;
+      // Marca el día como editado a mano para que la regeneración automática desde
+      // MASTER/plantilla (que corre en cada arranque) nunca lo vuelva a tocar,
+      // sea una fecha pasada o futura.
+      entry.manualEdit=true;
+      entry.sourceCalculation='manual';
       saveDB();
       renderAll();
     });
@@ -1566,7 +1571,10 @@ function generarAnoDesdePlantilla(year){
     const key=date+'|'+concept;
     const prev=prevDaysMap.get(key);
     const isPast=date<todayIso;
-    if(prev && isPast){
+    // Se conserva tal cual si ya pasó (histórico) O si el usuario lo editó a mano,
+    // sea la fecha futura o no. Solo se recalcula desde la plantilla/MASTER lo que
+    // nunca se ha tocado a mano.
+    if(prev && (isPast || prev.manualEdit===true)){
       days.push(prev);
       continue;
     }
@@ -2459,12 +2467,18 @@ function setMasterStatus(msg, ok=null){
 // ============================================================
 function renderAll(){
   // Reconciliar saldos iniciales de todos los años futuros con el cierre del año anterior.
-  // Esto corrige estados antiguos de localStorage/Gist sin tocar los datos de movimientos.
+  // Esto es un recálculo derivado de los propios datos ya cargados (del Gist), no una
+  // edición del usuario. Se recalcula en CADA render, incluido el primero justo al abrir
+  // el Gist — así que si usa saveDB() normal, dispara el aviso de "cambios locales
+  // pendientes" nada más entrar, sin haber tocado nada. Por eso se guarda con
+  // sync:false: se corrige en memoria/caché local, pero no se trata como un cambio
+  // real a subir. Si el usuario hace una edición de verdad después, esa sí llamará a
+  // saveDB() normal y avisará si falta el token, como debe ser.
   const startsChanged=reconcileFutureYearStarts();
   // Reconciliar siempre los totales de Tarjeta con Diario en años/meses abiertos.
-  // Esto también arregla estados antiguos guardados en localStorage/Gist.
+  // Mismo motivo: es un recálculo derivado, no una edición real del usuario.
   Object.keys(DB.years||{}).forEach(y=>{ syncAllOpenTarjetasToDiario(Number(y)); });
-  if(startsChanged) saveDB();
+  if(startsChanged) saveDB({sync:false});
   populateYearSelect();
   populateMonthFilter();
   populateTarjMonthSelect();
