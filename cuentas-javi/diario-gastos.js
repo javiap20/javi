@@ -184,6 +184,17 @@ function yearTotals(year){
   return { start: yd.start||0, saldoFinal, ingresos, gastos, ahorro: ingresos+gastos, tarjeta };
 }
 
+// Saldo real con fecha de hoy: solo tiene en cuenta movimientos hasta hoy
+// (ignora lo que aún es futuro/previsto), a diferencia de "Saldo final" que
+// incluye todo el año, previsiones futuras incluidas.
+function balanceHoy(year){
+  const yd = ensureYear(year);
+  const sorted = getSortedDays(year);
+  const todayIso = isoDate(new Date());
+  const hastaHoy = sorted.filter(e=>e.date <= todayIso);
+  return hastaHoy.length ? hastaHoy[hastaHoy.length-1].balance : (yd.start||0);
+}
+
 // ============================================================
 // RENDER: shell (year select, tabs, ticker)
 // ============================================================
@@ -298,7 +309,9 @@ function renderResumen(){
     const diffVal = extra ? extra.diff : null;
     const hasDiff = diffVal!==null && diffVal!==undefined;
     const diffTxt = hasDiff ? fmtSigned(diffVal)+' €' : '—';
+    const saldoHoy = balanceHoy(ui.year);
     kpiRowExtra.innerHTML = `
+      ${kpiCardCream('Saldo a día de hoy', fmt(saldoHoy)+' €', saldoHoy>=0?'grad-pos':'grad-neg')}
       ${kpiCardCream('Primer negativo', firstTxt, firstNeg?'grad-neg':'grad-pos')}
       ${kpiCardCream('Negativo más alto', worstTxt, worstNeg?'grad-neg':'grad-pos')}
       ${kpiCardCream('VS Previsión', diffTxt, !hasDiff?'violet':(diffVal>=0?'grad-pos':'grad-neg'))}
@@ -312,7 +325,7 @@ function emptyKpis(){
     .map(l=>kpiCard(l,'—','')).join('');
 }
 function emptyKpisExtra(){
-  return ['Primer negativo','Negativo más alto','VS Previsión']
+  return ['Saldo a día de hoy','Primer negativo','Negativo más alto','VS Previsión']
     .map(l=>kpiCardCream(l,'—','violet')).join('');
 }
 function kpiCard(label,value,cls){
