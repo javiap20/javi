@@ -283,7 +283,7 @@ function renderResumen(){
   sub.textContent = ui.year;
   kpiRow.innerHTML = `
     ${kpiCard('Saldo inicial', fmt(t.start)+' €','')}
-    ${kpiCard('Saldo final', fmt(t.saldoFinal)+' €', t.saldoFinal>=t.start?'pos':'neg')}
+    ${kpiCard('Saldo final', fmt(t.saldoFinal)+' €', 'card')}
     ${kpiCard('Ingresos', fmt(t.ingresos)+' €','pos')}
     ${kpiCard('Gastos', fmt(t.gastos)+' €','neg')}
     ${kpiCard('Ahorro neto', fmtSigned(t.ahorro)+' €', t.ahorro>=0?'pos':'neg')}
@@ -291,13 +291,17 @@ function renderResumen(){
   `;
   if(kpiRowExtra){
     const extra = (typeof getResumenExtras==='function') ? getResumenExtras(ui.year) : null;
-    const firstTxt = extra && extra.firstNegative ? `${extra.firstNegative.date} · ${fmt(extra.firstNegative.amount)} €` : 'Sin negativo';
-    const worstTxt = extra && extra.worstNegative ? `${extra.worstNegative.date} · ${fmt(extra.worstNegative.amount)} €` : 'Sin negativo';
-    const diffTxt = extra && extra.diff!==null && extra.diff!==undefined ? fmtSigned(extra.diff)+' €' : '—';
+    const firstNeg = extra && extra.firstNegative;
+    const worstNeg = extra && extra.worstNegative;
+    const firstTxt = firstNeg ? `${firstNeg.date} · ${fmt(firstNeg.amount)} €` : 'Sin negativo';
+    const worstTxt = worstNeg ? `${worstNeg.date} · ${fmt(worstNeg.amount)} €` : 'Sin negativo';
+    const diffVal = extra ? extra.diff : null;
+    const hasDiff = diffVal!==null && diffVal!==undefined;
+    const diffTxt = hasDiff ? fmtSigned(diffVal)+' €' : '—';
     kpiRowExtra.innerHTML = `
-      ${kpiCardCream('Primer negativo', firstTxt)}
-      ${kpiCardCream('Negativo más alto', worstTxt)}
-      ${kpiCardCream('VS Previsión', diffTxt)}
+      ${kpiCardCream('Primer negativo', firstTxt, firstNeg?'grad-neg':'grad-pos')}
+      ${kpiCardCream('Negativo más alto', worstTxt, worstNeg?'grad-neg':'grad-pos')}
+      ${kpiCardCream('VS Previsión', diffTxt, !hasDiff?'violet':(diffVal>=0?'grad-pos':'grad-neg'))}
     `;
   }
   const months = monthlyAggregates(ui.year);
@@ -309,13 +313,13 @@ function emptyKpis(){
 }
 function emptyKpisExtra(){
   return ['Primer negativo','Negativo más alto','VS Previsión']
-    .map(l=>kpiCardCream(l,'—')).join('');
+    .map(l=>kpiCardCream(l,'—','violet')).join('');
 }
 function kpiCard(label,value,cls){
   return `<div class="kpi ${cls||''}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 }
-function kpiCardCream(label,value){
-  return `<div class="kpi violet"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
+function kpiCardCream(label,value,cls){
+  return `<div class="kpi ${cls||'violet'}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 }
 function emptyState(title,sub){
   return `<div class="empty-state"><div class="big">·</div><div><strong>${title}</strong></div><div>${sub}</div></div>`;

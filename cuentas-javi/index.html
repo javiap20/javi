@@ -130,8 +130,8 @@
     background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
     padding:14px 14px 12px;box-shadow:var(--shadow);
   }
-  .kpi .kpi-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:6px;}
-  .kpi .kpi-value{font-size:19px;font-weight:600;}
+  .kpi .kpi-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin-bottom:6px;text-align:center;}
+  .kpi .kpi-value{font-size:19px;font-weight:600;text-align:center;}
   .kpi.pos .kpi-value{color:var(--pos);}
   .kpi.neg .kpi-value{color:var(--neg);}
   .kpi.card .kpi-value{color:var(--card);}
@@ -140,6 +140,12 @@
   .kpi.violet{background:linear-gradient(180deg,#F1EBFB 0%,#FBFAFE 100%);border-color:#E1D5F5;}
   .kpi.violet .kpi-label{white-space:nowrap;}
   .kpi.violet .kpi-value{color:#6E4FAE;white-space:nowrap;}
+  .kpi.grad-pos{background:linear-gradient(180deg,#E3F1EA 0%,#FBFAFE 100%);border-color:#CDE7DA;}
+  .kpi.grad-pos .kpi-label{white-space:nowrap;}
+  .kpi.grad-pos .kpi-value{color:var(--pos);white-space:nowrap;}
+  .kpi.grad-neg{background:linear-gradient(180deg,#F6E7E2 0%,#FBFAFE 100%);border-color:#EFD4C6;}
+  .kpi.grad-neg .kpi-label{white-space:nowrap;}
+  .kpi.grad-neg .kpi-value{color:var(--neg);white-space:nowrap;}
 
   /* ---------- Panels ---------- */
   .panel{
@@ -605,7 +611,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="diario-gastos.js?v=20260913d"></script>
+<script src="diario-gastos.js?v=20260913e"></script>
 <script src="analisis-finanzas.js?v=20260913"></script>
 </body>
 </html>
