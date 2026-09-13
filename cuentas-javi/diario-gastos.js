@@ -269,10 +269,12 @@ function renderTicker(){
 // ============================================================
 function renderResumen(){
   const kpiRow = document.getElementById('kpiRow');
+  const kpiRowExtra = document.getElementById('kpiRowExtra');
   const sub = document.getElementById('resumenSub');
   const chartBox = document.getElementById('monthChart');
   if(!ui.year){
     kpiRow.innerHTML = emptyKpis();
+    if(kpiRowExtra) kpiRowExtra.innerHTML = emptyKpisExtra();
     sub.textContent = '';
     chartBox.innerHTML = emptyState('Sin datos', 'Importa tu Excel o crea un año para empezar.');
     return;
@@ -285,8 +287,19 @@ function renderResumen(){
     ${kpiCard('Ingresos', fmt(t.ingresos)+' €','pos')}
     ${kpiCard('Gastos', fmt(t.gastos)+' €','neg')}
     ${kpiCard('Ahorro neto', fmtSigned(t.ahorro)+' €', t.ahorro>=0?'pos':'neg')}
-    ${kpiCard('Gasto tarjeta', fmt(t.tarjeta)+' €','card')}
+    ${kpiCard('Gasto tarjeta2', fmt(t.tarjeta)+' €','card')}
   `;
+  if(kpiRowExtra){
+    const extra = (typeof getResumenExtras==='function') ? getResumenExtras(ui.year) : null;
+    const firstTxt = extra && extra.firstNegative ? `${extra.firstNegative.date} · ${fmt(extra.firstNegative.amount)} €` : 'Sin negativo';
+    const worstTxt = extra && extra.worstNegative ? `${extra.worstNegative.date} · ${fmt(extra.worstNegative.amount)} €` : 'Sin negativo';
+    const diffTxt = extra && extra.diff!==null && extra.diff!==undefined ? fmtSigned(extra.diff)+' €' : '—';
+    kpiRowExtra.innerHTML = `
+      ${kpiCardCream('Primer negativo', firstTxt)}
+      ${kpiCardCream('Negativo más alto', worstTxt)}
+      ${kpiCardCream('VS Previsión', diffTxt)}
+    `;
+  }
   const months = monthlyAggregates(ui.year);
   chartBox.innerHTML = buildMonthChartSVG(months);
 }
@@ -294,8 +307,15 @@ function emptyKpis(){
   return ['Saldo inicial','Saldo final','Ingresos','Gastos','Ahorro neto','Gasto tarjeta']
     .map(l=>kpiCard(l,'—','')).join('');
 }
+function emptyKpisExtra(){
+  return ['Primer negativo','Negativo más alto','VS Previsión']
+    .map(l=>kpiCardCream(l,'—')).join('');
+}
 function kpiCard(label,value,cls){
   return `<div class="kpi ${cls||''}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
+}
+function kpiCardCream(label,value){
+  return `<div class="kpi cream"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 }
 function emptyState(title,sub){
   return `<div class="empty-state"><div class="big">·</div><div><strong>${title}</strong></div><div>${sub}</div></div>`;

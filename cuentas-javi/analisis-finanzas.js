@@ -315,6 +315,25 @@
     document.getElementById('modeAnalysis').className='btn '+(analysis?'primary':'ghost');
     if(analysis) renders[active]();
   }
+  // Datos para las cards extra del tab Resumen (Primer negativo / Negativo más alto / VS Previsión)
+  window.getResumenExtras=function(y){
+    if(!y) return null;
+    const sorted=getSortedDays(y).filter(e=>String(e.concept||'').trim());
+    const negativeEntries=sorted.filter(e=>Number(e.balance)<0);
+    const firstNegative=negativeEntries.length?negativeEntries[0]:null;
+    const worstNegative=negativeEntries.length?negativeEntries.reduce((a,b)=>Number(b.balance)<Number(a.balance)?b:a,negativeEntries[0]):null;
+    const shortDate=e=>{if(!e)return null;const d=parseDateISO(e.date);return `${d.getDate()} ${MESES_ABR[d.getMonth()].toLowerCase()}`;};
+    const t=yearTotals(y);
+    const store=analysisForecastStore();
+    const frozen=store[String(y)];
+    const forecast=frozen?Number(frozen.value)||0:Number(t.saldoFinal)||0;
+    const diff=frozen?Number(t.saldoFinal)-forecast:null;
+    return {
+      firstNegative: firstNegative?{date:shortDate(firstNegative),amount:Number(firstNegative.balance)}:null,
+      worstNegative: worstNegative?{date:shortDate(worstNegative),amount:Number(worstNegative.balance)}:null,
+      diff
+    };
+  };
   document.getElementById('modeDay').onclick=()=>setMode('day');
   document.getElementById('modeAnalysis').onclick=()=>setMode('analysis');
   document.querySelectorAll('#analysisTabs [data-analysis]').forEach(b=>b.onclick=()=>{document.querySelectorAll('#analysisTabs [data-analysis]').forEach(x=>x.classList.remove('active'));b.classList.add('active');active=b.dataset.analysis;renders[active]();});
