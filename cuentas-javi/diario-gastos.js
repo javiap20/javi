@@ -287,7 +287,7 @@ function renderResumen(){
     ${kpiCard('Ingresos', fmt(t.ingresos)+' €','pos')}
     ${kpiCard('Gastos', fmt(t.gastos)+' €','neg')}
     ${kpiCard('Ahorro neto', fmtSigned(t.ahorro)+' €', t.ahorro>=0?'pos':'neg')}
-    ${kpiCard('Gasto tarjeta2', fmt(t.tarjeta)+' €','card')}
+    ${kpiCard('Gasto tarjeta3', fmt(t.tarjeta)+' €','card')}
   `;
   if(kpiRowExtra){
     const extra = (typeof getResumenExtras==='function') ? getResumenExtras(ui.year) : null;
