@@ -1628,11 +1628,64 @@ function generarAnoDesdePlantilla(year){
   DB.years[yearStr]={start,days,cardEntries};
 }
 
+// Refresca, para un año concreto, el IMPORTE de los movimientos y categorías
+// de tarjeta que sean de HOY EN ADELANTE y que nadie haya tocado a mano,
+// tomando el valor vivo de Gastos Fijos/MASTER. No añade ni quita días, no
+// recalcula el pasado, y nunca toca nada con manualEdit===true.
+function refrescarFuturoDesdeFijos(year){
+  const yd = DB.years[String(year)];
+  if(!yd) return {dias:0, tarjeta:0};
+  const todayIso = isoDate(new Date());
+  let dias = 0, tarjeta = 0;
+
+  // 1) Categorías de Tarjeta: solo meses aún no cerrados y no editados a mano
+  (yd.cardEntries||[]).forEach(c=>{
+    if(!c || !c.category || c.manualEdit===true) return;
+    const month = Number(c.month);
+    if(!month || isCalendarMonthClosed(year, month)) return;
+    const result = amountForTemplateCard(c.category, year, month);
+    if(result.include && Math.abs(result.amount-Number(c.amount||0))>1e-9){
+      c.amount = result.amount;
+      c.sourceCalculation = 'master-refresh';
+      tarjeta++;
+    }
+  });
+  // Vuelca el nuevo total de tarjeta a la fila "Tarjetas <mes>" del Diario
+  // (usa la misma función que ya usa la edición manual de una categoría)
+  if(tarjeta>0) syncAllOpenTarjetasToDiario(year);
+
+  // 2) Movimientos de cuenta en Diario: solo fecha de hoy en adelante y no
+  // editados a mano. Las filas "Tarjetas <mes>" ya se han refrescado arriba.
+  (yd.days||[]).forEach(d=>{
+    if(!d || !d.concept || d.manualEdit===true) return;
+    if(d.date < todayIso) return;
+    if(/^tarjetas\s+/i.test(String(d.concept))) return;
+    const result = amountForTemplateDay(d.concept, d.date, year);
+    if(result.include && Math.abs(result.amount-Number(d.amount||0))>1e-9){
+      d.amount = result.amount;
+      d.sourceCalculation = 'master-refresh';
+      dias++;
+    }
+  });
+
+  return {dias, tarjeta};
+}
+
 function sincronizarDiarioConFijos(){
-  if(!TEMPLATE_2027 || !DB.masterLoaded) return;
-  // 2027 queda protegido como versión definitiva. MASTER solo refresca años posteriores.
-  const years=fijosYears().filter(y=>y>2027 && DB.years[String(y)]).sort((a,b)=>a-b);
-  years.forEach(year=>generarAnoDesdePlantilla(year));
+  if(!DB.masterLoaded) return;
+
+  // 2026 (año real) y 2027 (estructura definitiva): la estructura de días NO
+  // se regenera; solo se refresca el importe de lo que sea futuro y no se
+  // haya editado a mano (ver refrescarFuturoDesdeFijos).
+  Object.keys(DB.years||{}).map(Number).filter(y=>y<=2027).sort((a,b)=>a-b)
+    .forEach(year=>refrescarFuturoDesdeFijos(year));
+
+  // 2028 en adelante: sí se generan/regeneran por completo a partir de la
+  // plantilla 2027 + los importes vivos de MASTER (requiere plantilla).
+  if(TEMPLATE_2027){
+    const years=fijosYears().filter(y=>y>2027 && DB.years[String(y)]).sort((a,b)=>a-b);
+    years.forEach(year=>generarAnoDesdePlantilla(year));
+  }
 }
 
 function regenerar2027UnaVez(){
@@ -2082,6 +2135,14 @@ document.getElementById('btnSpecialRulesTop').addEventListener('click', openSpec
 
 document.getElementById('btnGenerar2028').addEventListener('click', generar2028UnaVez);
 document.getElementById('btnSyncMaster').addEventListener('click', cargarMasterAutomatico);
+document.getElementById('btnSyncFuturo').addEventListener('click', ()=>{
+  if(!DB.masterLoaded){ toast('Carga MASTER primero'); return; }
+  sincronizarDiarioConFijos();
+  DB.updatedAt = new Date().toISOString();
+  saveDB();
+  renderAll();
+  toast('Diario y Tarjeta actualizados con los importes vivos de Gastos fijos (solo futuro)');
+});
 document.getElementById('btnGist').addEventListener('click', openGistPanel);
 document.getElementById('btnAddMov').addEventListener('click', modalAddMovimiento);
 document.getElementById('btnAddCat').addEventListener('click', modalAddCategoria);
