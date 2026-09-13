@@ -475,7 +475,14 @@ function renderDiario(){
     const items = (groups.get(m)||[]).slice().sort((a,b)=>a.date<b.date?-1:(a.date>b.date?1:0));
     if(!items.length) return;
 
-    bodyHtml += `<tr class="diario-month-row"><td colspan="5">${MESES[m-1]}</td></tr>`;
+    // Cuando el año actual no empieza en enero, enero queda "envuelto" al
+    // final (después de diciembre) mostrando datos ya del pasado. Se marca
+    // con un separador y una cabecera de color distinto al naranja normal.
+    const esEneroEnvuelto = isYearActual && !monthFilter && todayMonth!==1 && m===1;
+    if(esEneroEnvuelto){
+      bodyHtml += `<tr class="diario-wrap-sep"><td colspan="5"></td></tr>`;
+    }
+    bodyHtml += `<tr class="diario-month-row${esEneroEnvuelto?' diario-month-row-wrap':''}"><td colspan="5">${MESES[m-1]}</td></tr>`;
 
     if(isYearActual){
       const activos = items.filter(e=>!isArchived(e));
