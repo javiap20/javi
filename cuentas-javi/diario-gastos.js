@@ -2103,6 +2103,153 @@ async function importDashboardJson(file){
   }
 }
 
+// ============================================================
+// BUSCADOR DE GASTO / INGRESO
+// ============================================================
+function normalizeSearchText(s){
+  return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+// Índice de todos los conceptos (Diario) y categorías (Tarjeta) distintos
+// que existen en cualquier año guardado, con cuántas veces aparece cada uno.
+function buscadorIndiceConceptos(){
+  const map = new Map();
+  Object.values(DB.years||{}).forEach(yd=>{
+    (yd.days||[]).forEach(d=>{
+      const name = String(d.concept||'').trim();
+      if(!name || /^tarjetas\s+/i.test(name)) return;
+      const key = normalizeSearchText(name);
+      if(!key) return;
+      if(!map.has(key)) map.set(key,{label:name,count:0});
+      map.get(key).count++;
+    });
+    (yd.cardEntries||[]).forEach(c=>{
+      const name = String(c.category||'').trim();
+      if(!name) return;
+      const key = normalizeSearchText(name);
+      if(!key) return;
+      if(!map.has(key)) map.set(key,{label:name,count:0});
+      map.get(key).count++;
+    });
+  });
+  return Array.from(map.values());
+}
+
+function renderBuscadorSuggest(query){
+  const box = document.getElementById('buscadorSuggest');
+  if(!box) return;
+  const q = normalizeSearchText(query);
+  if(!q){ box.classList.remove('open'); box.innerHTML=''; return; }
+  const matches = buscadorIndiceConceptos()
+    .filter(it=>normalizeSearchText(it.label).includes(q))
+    .sort((a,b)=> b.count-a.count || a.label.localeCompare(b.label,'es'))
+    .slice(0,8);
+  if(!matches.length){ box.classList.remove('open'); box.innerHTML=''; return; }
+  box.innerHTML = matches.map(m=>`
+    <div class="sugg-item" data-concept="${escapeHtml(m.label)}">
+      <span>${escapeHtml(m.label)}</span>
+      <span class="sugg-tag">${m.count} mov.</span>
+    </div>`).join('');
+  box.classList.add('open');
+  box.querySelectorAll('.sugg-item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const concept = el.getAttribute('data-concept');
+      const input = document.getElementById('buscadorInput');
+      if(input) input.value = concept;
+      box.classList.remove('open'); box.innerHTML='';
+      ejecutarBusquedaConcepto(concept);
+    });
+  });
+}
+
+// Busca el texto introducido entre todos los movimientos de Diario y
+// categorías de Tarjeta de TODOS los años, y los agrupa año a año.
+function ejecutarBusquedaConcepto(query){
+  const results = document.getElementById('buscadorResults');
+  if(!results) return;
+  const q = normalizeSearchText(query);
+  if(!q){ results.innerHTML=''; return; }
+
+  const years = Object.keys(DB.years||{}).map(Number).sort((a,b)=>a-b);
+  const bloques = [];
+  years.forEach(year=>{
+    const yd = DB.years[String(year)];
+    const filas = [];
+    (yd.days||[]).forEach(d=>{
+      const name = String(d.concept||'').trim();
+      if(!name || /^tarjetas\s+/i.test(name)) return;
+      if(!normalizeSearchText(name).includes(q)) return;
+      filas.push({label:d.date, amount:Number(d.amount||0), origen:'Diario'});
+    });
+    (yd.cardEntries||[]).forEach(c=>{
+      const name = String(c.category||'').trim();
+      if(!name) return;
+      if(!normalizeSearchText(name).includes(q)) return;
+      filas.push({label:`${MESES[Number(c.month)-1]} ${year}`, amount:-Math.abs(Number(c.amount||0)), origen:'Tarjeta'});
+    });
+    if(!filas.length) return;
+    filas.sort((a,b)=> String(a.label).localeCompare(String(b.label)));
+    const total = filas.reduce((s,f)=>s+f.amount,0);
+    bloques.push({year, filas, total});
+  });
+
+  if(!bloques.length){
+    results.innerHTML = emptyState('Sin resultados', `No hay movimientos que coincidan con "${escapeHtml(query)}".`);
+    return;
+  }
+
+  results.innerHTML = bloques.map((b,i)=>`
+    <div class="buscador-year-block">
+      <div class="buscador-year-head" data-toggle-year="${i}">
+        <span>${b.year} · ${b.filas.length} movimiento${b.filas.length===1?'':'s'}</span>
+        <span class="buscador-year-total ${b.total>=0?'pos':'neg'}">${fmtSigned(b.total)} €</span>
+      </div>
+      <div class="buscador-year-rows" id="buscadorYearRows${i}">
+        ${b.filas.map(f=>`
+          <div class="buscador-row">
+            <span>${escapeHtml(f.label)}<span class="src-tag">${f.origen}</span></span>
+            <span class="${f.amount>=0?'amount-pos':'amount-neg'}">${fmt(f.amount)} €</span>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  results.querySelectorAll('[data-toggle-year]').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      const idx = head.getAttribute('data-toggle-year');
+      const rows = document.getElementById('buscadorYearRows'+idx);
+      if(rows) rows.classList.toggle('open');
+    });
+  });
+  // El año más reciente se muestra ya abierto
+  const lastRows = document.getElementById('buscadorYearRows'+(bloques.length-1));
+  if(lastRows) lastRows.classList.add('open');
+}
+
+(function initBuscador(){
+  const input = document.getElementById('buscadorInput');
+  if(!input) return;
+  let debounceId = null;
+  input.addEventListener('input', e=>{
+    const val = e.target.value;
+    renderBuscadorSuggest(val);
+    clearTimeout(debounceId);
+    debounceId = setTimeout(()=>ejecutarBusquedaConcepto(val), 200);
+  });
+  input.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){
+      const box=document.getElementById('buscadorSuggest');
+      if(box) box.classList.remove('open');
+      ejecutarBusquedaConcepto(e.target.value);
+    }
+  });
+  document.addEventListener('click', e=>{
+    if(!e.target.closest('.buscador-input-wrap')){
+      const box=document.getElementById('buscadorSuggest');
+      if(box) box.classList.remove('open');
+    }
+  });
+})();
+
 document.getElementById('btnExport').addEventListener('click', exportDashboardJson);
 document.getElementById('importJsonFile').addEventListener('change', async e=>{ await importDashboardJson(e.target.files[0]); });
 

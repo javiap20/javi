@@ -212,6 +212,36 @@
     background:var(--panel-alt);font-weight:700;font-size:10.5px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--ink-soft);padding:7px 8px;text-align:left;
   }
+
+  /* ---------- Buscador ---------- */
+  .buscador-input-wrap{position:relative;margin-bottom:16px;}
+  .buscador-input-wrap input{width:100%;padding:11px 14px;font-size:14.5px;}
+  .buscador-suggest{
+    position:absolute;top:100%;left:0;right:0;background:var(--panel);
+    border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;
+    box-shadow:var(--shadow);max-height:240px;overflow-y:auto;z-index:20;display:none;
+  }
+  .buscador-suggest.open{display:block;}
+  .buscador-suggest .sugg-item{
+    padding:9px 14px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;
+    align-items:center;gap:8px;border-bottom:1px solid var(--line);
+  }
+  .buscador-suggest .sugg-item:last-child{border-bottom:none;}
+  .buscador-suggest .sugg-item:hover{background:var(--panel-alt);}
+  .buscador-suggest .sugg-tag{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;}
+  .buscador-year-block{margin-bottom:10px;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .buscador-year-head{
+    display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+    padding:10px 14px;background:var(--panel-alt);font-weight:700;font-size:13px;
+  }
+  .buscador-year-total.pos{color:var(--pos);}
+  .buscador-year-total.neg{color:var(--neg);}
+  .buscador-year-rows{display:none;padding:2px 6px;}
+  .buscador-year-rows.open{display:block;}
+  .buscador-row{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 8px;border-bottom:1px solid var(--line);}
+  .buscador-row:last-child{border-bottom:none;}
+  .buscador-row .src-tag{font-size:9.5px;color:var(--ink-soft);text-transform:uppercase;margin-left:8px;}
+
   #diarioTableWrap .row-input{text-align:center;}
   #diarioTableWrap tr.fila-archivada{opacity:.55;}
   #diarioTableWrap tr.fila-archivada:hover{opacity:.85;}
@@ -523,6 +553,7 @@
     <button class="tab-btn" data-view="diario">Diario</button>
     <button class="tab-btn" data-view="tarjeta">Tarjeta</button>
     <button class="tab-btn" data-view="fijos">Gastos fijos</button>
+    <button class="tab-btn" data-view="buscador">Buscador</button>
   </div>
 
   <div class="tabs" id="analysisTabs" style="display:none;justify-content:center;">
@@ -611,6 +642,20 @@
     </div>
   </div>
 
+  <!-- ===================== BUSCADOR ===================== -->
+  <div class="view" id="view-buscador">
+    <div class="panel">
+      <div class="toolbar">
+        <h2 style="margin-right:auto">Buscador de gasto / ingreso</h2>
+      </div>
+      <div class="buscador-input-wrap">
+        <input type="text" id="buscadorInput" class="field" placeholder="Escribe un concepto (p. ej. Casa, Netflix, Nómina)…" autocomplete="off">
+        <div id="buscadorSuggest" class="buscador-suggest"></div>
+      </div>
+      <div id="buscadorResults" class="buscador-results"></div>
+    </div>
+  </div>
+
   <div class="footer-note">Los datos se guardan en este navegador (localStorage). Usa «Exportar» para hacer una copia.</div>
 </div>
 
@@ -619,7 +664,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="diario-gastos.js?v=20260913f"></script>
+<script src="diario-gastos.js?v=20260913g"></script>
 <script src="analisis-finanzas.js?v=20260913"></script>
 </body>
 </html>
