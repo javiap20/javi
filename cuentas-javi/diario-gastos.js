@@ -287,7 +287,7 @@ function renderResumen(){
     ${kpiCard('Ingresos', fmt(t.ingresos)+' €','pos')}
     ${kpiCard('Gastos', fmt(t.gastos)+' €','neg')}
     ${kpiCard('Ahorro neto', fmtSigned(t.ahorro)+' €', t.ahorro>=0?'pos':'neg')}
-    ${kpiCard('Gasto tarjeta3', fmt(t.tarjeta)+' €','card')}
+    ${kpiCard('Gasto tarjeta', fmt(t.tarjeta)+' €','card')}
   `;
   if(kpiRowExtra){
     const extra = (typeof getResumenExtras==='function') ? getResumenExtras(ui.year) : null;
@@ -315,7 +315,7 @@ function kpiCard(label,value,cls){
   return `<div class="kpi ${cls||''}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 }
 function kpiCardCream(label,value){
-  return `<div class="kpi cream"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
+  return `<div class="kpi violet"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 }
 function emptyState(title,sub){
   return `<div class="empty-state"><div class="big">·</div><div><strong>${title}</strong></div><div>${sub}</div></div>`;
